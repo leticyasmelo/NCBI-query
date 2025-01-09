@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import re
+import time
 
 # NCBI GEO query functions
 @st.cache
@@ -20,8 +21,8 @@ def search_geo(term="single-cell RNA-seq", retmax=10000):
     return results.get("esearchresult", {}).get("idlist", []), int(results.get("esearchresult", {}).get("count", 0))
 
 @st.cache
-def fetch_geo_metadata(geo_ids, chunk_size=100):
-    """Fetch metadata for given GEO dataset IDs in chunks."""
+def fetch_geo_metadata(geo_ids, chunk_size=50):
+    """Fetch metadata for given GEO dataset IDs in chunks with error handling."""
     GEO_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
     results = {}
     for i in range(0, len(geo_ids), chunk_size):
@@ -31,10 +32,18 @@ def fetch_geo_metadata(geo_ids, chunk_size=100):
             "id": ",".join(chunk),
             "retmode": "json",
         }
-        response = requests.get(GEO_SUMMARY_URL, params=params)
-        response.raise_for_status()
-        chunk_results = response.json().get("result", {})
-        results.update(chunk_results)
+        try:
+            response = requests.get(GEO_SUMMARY_URL, params=params)
+            response.raise_for_status()
+            chunk_results = response.json().get("result", {})
+            results.update(chunk_results)
+        except requests.exceptions.HTTPError as e:
+            st.error(f"HTTPError: {e} for chunk {chunk}")
+            continue  # Skip the problematic chunk
+        except Exception as e:
+            st.error(f"Unexpected error: {e} for chunk {chunk}")
+            continue
+        time.sleep(0.5)  # Delay to avoid rate limits
     return results
 
 @st.cache

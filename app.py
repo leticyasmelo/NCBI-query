@@ -5,7 +5,7 @@ import re
 
 # NCBI GEO query functions
 @st.cache
-def search_geo(term="single-cell RNA-seq", retmax=50):
+def search_geo(term="single-cell RNA-seq", retmax=10000):
     """Query GEO for datasets matching the given term."""
     GEO_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     params = {
@@ -17,7 +17,7 @@ def search_geo(term="single-cell RNA-seq", retmax=50):
     response = requests.get(GEO_BASE_URL, params=params)
     response.raise_for_status()
     results = response.json()
-    return results.get("esearchresult", {}).get("idlist", [])
+    return results.get("esearchresult", {}).get("idlist", []), int(results.get("esearchresult", {}).get("count", 0))
 
 @st.cache
 def fetch_geo_metadata(geo_ids):
@@ -41,18 +41,24 @@ def process_geo_metadata(geo_metadata):
             continue
         title = value.get("title", "N/A")
         summary = value.get("summary", "N/A")
-        sample_count = re.search(r"(\d+) cells?", summary)
-        cell_count = int(sample_count.group(1)) if sample_count else "Unknown"
-        is_time_series = "time" in summary.lower()
-        is_linear = "differentiation" in summary.lower() or "linear" in summary.lower()
-        is_branched = "branch" in summary.lower() or "cyclic" in summary.lower()
+        
+        # Extract cell count
+        cell_count = "Unknown"
+        sample_count = re.search(r"(\d[\d,]*) cells?", summary)
+        if sample_count:
+            cell_count = sample_count.group(1).replace(",", "")
+        
+        # Extract sequencing depth
+        seq_depth = "Unknown"
+        seq_match = re.search(r"sequencing depth of (\d[\d,]*)", summary.lower())
+        if seq_match:
+            seq_depth = seq_match.group(1).replace(",", "")
+        
         datasets.append({
             "Dataset ID": value.get("uid"),
             "Title": title,
             "Cell Count": cell_count,
-            "Conditions": "Multiple" if "healthy" in summary.lower() and "disease" in summary.lower() else "Single",
-            "Trajectory Type": "Linear" if is_linear else "Branched" if is_branched else "Unknown",
-            "Time-Series": "Yes" if is_time_series else "No",
+            "Sequencing Depth": seq_depth,
             "Summary": summary,
         })
     return pd.DataFrame(datasets)
@@ -65,12 +71,13 @@ This app queries the NCBI GEO database for single-cell RNA-seq datasets and allo
 
 # Sidebar inputs for query and result limits
 search_term = st.sidebar.text_input("Search Term", value="single-cell RNA-seq")
-retmax = st.sidebar.slider("Number of Results", min_value=10, max_value=100, value=50)
+retmax = st.sidebar.number_input("Number of Results to Fetch", min_value=10, max_value=10000, value=1000, step=10)
 
 # Fetch and display data
 if st.button("Fetch Datasets"):
     with st.spinner("Querying NCBI GEO..."):
-        geo_ids = search_geo(term=search_term, retmax=retmax)
+        geo_ids, total_count = search_geo(term=search_term, retmax=retmax)
+        st.info(f"Found {total_count} datasets in total. Displaying up to {len(geo_ids)} datasets.")
         if not geo_ids:
             st.warning("No datasets found for the given query.")
         else:
@@ -80,41 +87,27 @@ if st.button("Fetch Datasets"):
             if df.empty:
                 st.warning("No datasets could be processed.")
             else:
-                st.success(f"Found {len(df)} datasets.")
+                st.success(f"Processed {len(df)} datasets.")
                 
                 # Filters for the dataset table
                 st.sidebar.header("Filter Options")
-                conditions = st.sidebar.multiselect(
-                    "Select Conditions", df["Conditions"].unique(), default=df["Conditions"].unique()
-                )
-                trajectory_type = st.sidebar.multiselect(
-                    "Select Trajectory Type", df["Trajectory Type"].unique(), default=df["Trajectory Type"].unique()
-                )
-                time_series = st.sidebar.selectbox("Is it Time-Series?", ["All", "Yes", "No"], index=0)
-
-                # Apply filters
-                filtered_df = df[
-                    (df["Conditions"].isin(conditions)) &
-                    (df["Trajectory Type"].isin(trajectory_type))
-                ]
-                if time_series != "All":
-                    filtered_df = filtered_df[filtered_df["Time-Series"] == time_series]
+                search_filter = st.sidebar.text_input("Search by Terms (e.g., macrophages)")
+                if search_filter:
+                    df = df[df["Summary"].str.contains(search_filter, case=False, na=False)]
 
                 # Display the table
-                st.write(f"### Filtered Datasets ({len(filtered_df)} results):")
-                st.dataframe(filtered_df)
+                st.write(f"### Filtered Datasets ({len(df)} results):")
+                st.dataframe(df)
 
                 # Option to download the filtered table
                 @st.cache
                 def convert_df_to_csv(dataframe):
                     return dataframe.to_csv(index=False).encode('utf-8')
 
-                csv = convert_df_to_csv(filtered_df)
+                csv = convert_df_to_csv(df)
                 st.download_button(
                     label="Download Filtered Table as CSV",
                     data=csv,
                     file_name="filtered_geo_datasets.csv",
                     mime="text/csv",
                 )
-
-

@@ -20,17 +20,22 @@ def search_geo(term="single-cell RNA-seq", retmax=10000):
     return results.get("esearchresult", {}).get("idlist", []), int(results.get("esearchresult", {}).get("count", 0))
 
 @st.cache
-def fetch_geo_metadata(geo_ids):
-    """Fetch metadata for given GEO dataset IDs."""
+def fetch_geo_metadata(geo_ids, chunk_size=100):
+    """Fetch metadata for given GEO dataset IDs in chunks."""
     GEO_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
-    params = {
-        "db": "gds",
-        "id": ",".join(geo_ids),
-        "retmode": "json",
-    }
-    response = requests.get(GEO_SUMMARY_URL, params=params)
-    response.raise_for_status()
-    return response.json().get("result", {})
+    results = {}
+    for i in range(0, len(geo_ids), chunk_size):
+        chunk = geo_ids[i:i + chunk_size]
+        params = {
+            "db": "gds",
+            "id": ",".join(chunk),
+            "retmode": "json",
+        }
+        response = requests.get(GEO_SUMMARY_URL, params=params)
+        response.raise_for_status()
+        chunk_results = response.json().get("result", {})
+        results.update(chunk_results)
+    return results
 
 @st.cache
 def process_geo_metadata(geo_metadata):

@@ -50,30 +50,33 @@ def process_geo_metadata(geo_metadata):
         # Extract GEO Accession Number
         geo_number = value.get("accession", "N/A")
         
-        # Extract species
+        # Extract species and clean formatting
         species = "Unknown"
         species_list = value.get("taxon", [])
         if species_list:
-            species = ", ".join(species_list)  # Combine multiple species if present
+            species = ", ".join(species_list).replace(",", "").strip()
 
-        # Extract cell count
-        cell_count = "Unknown"
-        sample_count = re.search(r"(\d[\d,]*) cells?", summary)
-        if sample_count:
-            cell_count = sample_count.group(1).replace(",", "")
-        
-        # Extract sequencing depth
-        seq_depth = "Unknown"
-        seq_match = re.search(r"sequencing depth of (\d[\d,]*)", summary.lower())
-        if seq_match:
-            seq_depth = seq_match.group(1).replace(",", "")
-        
+        # Include only single-cell datasets based on summary
+        if "single-cell" not in summary.lower():
+            continue
+
+        # Determine number of conditions
+        conditions = "Unknown"
+        condition_match = re.search(r"(\d+) (conditions|groups)", summary.lower())
+        if condition_match:
+            conditions = condition_match.group(1)
+
+        # Check if study is longitudinal
+        longitudinal = "No"
+        if any(keyword in summary.lower() for keyword in ["longitudinal", "time points", "day", "week", "month"]):
+            longitudinal = "Yes"
+
         datasets.append({
             "GEO Number": geo_number,
             "Title": title,
             "Species": species,
-            "Cell Count": cell_count,
-            "Sequencing Depth": seq_depth,
+            "Conditions": conditions,
+            "Longitudinal Study": longitudinal,
             "Summary": summary,
         })
     return pd.DataFrame(datasets)

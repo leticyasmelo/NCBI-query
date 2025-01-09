@@ -46,7 +46,16 @@ def process_geo_metadata(geo_metadata):
             continue
         title = value.get("title", "N/A")
         summary = value.get("summary", "N/A")
+
+        # Extract GEO Accession Number
+        geo_number = value.get("accession", "N/A")
         
+        # Extract species
+        species = "Unknown"
+        species_list = value.get("taxon", [])
+        if species_list:
+            species = ", ".join(species_list)  # Combine multiple species if present
+
         # Extract cell count
         cell_count = "Unknown"
         sample_count = re.search(r"(\d[\d,]*) cells?", summary)
@@ -60,8 +69,9 @@ def process_geo_metadata(geo_metadata):
             seq_depth = seq_match.group(1).replace(",", "")
         
         datasets.append({
-            "Dataset ID": value.get("uid"),
+            "GEO Number": geo_number,
             "Title": title,
+            "Species": species,
             "Cell Count": cell_count,
             "Sequencing Depth": seq_depth,
             "Summary": summary,
@@ -99,6 +109,11 @@ if st.button("Fetch Datasets"):
                 search_filter = st.sidebar.text_input("Search by Terms (e.g., macrophages)")
                 if search_filter:
                     df = df[df["Summary"].str.contains(search_filter, case=False, na=False)]
+
+                # Add a species filter
+                species_filter = st.sidebar.text_input("Filter by Species (e.g., human, mouse)")
+                if species_filter:
+                    df = df[df["Species"].str.contains(species_filter, case=False, na=False)]
 
                 # Display the table
                 st.write(f"### Filtered Datasets ({len(df)} results):")

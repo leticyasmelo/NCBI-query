@@ -6,8 +6,11 @@ import time
 
 # NCBI GEO query functions
 @st.cache_data
-def search_geo(term="scRNA-seq", retmax=10000):
-    """Query GEO for datasets matching the given term."""
+def search_geo(retmax=10000):
+    """Query GEO for datasets matching scRNA-seq-related terms."""
+    # Combine search terms with OR for broader search
+    term = "scRNA-seq OR single-cell RNAseq OR scRNAseq"
+    
     GEO_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     params = {
         "db": "gds",
@@ -99,17 +102,16 @@ if "longitudinal_filter" not in st.session_state:
 # Streamlit app
 st.title("NCBI GEO Single-Cell Dataset Explorer")
 st.markdown("""
-This app queries the NCBI GEO database for single-cell RNA-seq datasets and allows you to filter and explore the results.
+This app queries the NCBI GEO database for single-cell RNA-seq datasets using the terms `scRNA-seq`, `single-cell RNAseq`, and `scRNAseq` for a broad search. You can apply filters to refine the results.
 """)
 
-# Sidebar inputs for query and result limits
-search_term = st.sidebar.text_input("Search Term", value="scRNA-seq")
+# Sidebar inputs for result limits
 retmax = st.sidebar.number_input("Number of Results to Fetch", min_value=10, max_value=10000, value=1000, step=10)
 
 # Fetch and display data
 if st.button("Fetch Datasets"):
     with st.spinner("Querying NCBI GEO..."):
-        geo_ids, total_count = search_geo(term=search_term, retmax=retmax)
+        geo_ids, total_count = search_geo(retmax=retmax)
         st.info(f"Found {total_count} datasets in total. Displaying up to {len(geo_ids)} datasets.")
         if not geo_ids:
             st.warning("No datasets found for the given query.")

@@ -63,17 +63,11 @@ def process_geo_metadata(geo_metadata):
         species = "Unknown"
         species_list = value.get("taxon", [])
         if species_list:
-            species = ", ".join(species_list).replace(",", "").strip()
+            species = " ".join("".join(species_list).split())  # Properly format species
 
         # Include only single-cell datasets based on summary
         if "single-cell" not in summary.lower():
             continue
-
-        # Determine number of conditions
-        conditions = "Unknown"
-        condition_match = re.search(r"(\d+) (conditions|groups)", summary.lower())
-        if condition_match:
-            conditions = condition_match.group(1)
 
         # Check if study is longitudinal
         longitudinal = "No"
@@ -84,7 +78,6 @@ def process_geo_metadata(geo_metadata):
             "GEO Number": geo_number,
             "Title": title,
             "Species": species,
-            "Conditions": conditions,
             "Longitudinal Study": longitudinal,
             "Summary": summary,
         })
@@ -126,6 +119,11 @@ if st.button("Fetch Datasets"):
                 species_filter = st.sidebar.text_input("Filter by Species (e.g., human, mouse)")
                 if species_filter:
                     df = df[df["Species"].str.contains(species_filter, case=False, na=False)]
+
+                # Add a longitudinal study filter
+                longitudinal_filter = st.sidebar.selectbox("Filter by Longitudinal Study", options=["All", "Yes", "No"])
+                if longitudinal_filter != "All":
+                    df = df[df["Longitudinal Study"] == longitudinal_filter]
 
                 # Display the table
                 st.write(f"### Filtered Datasets ({len(df)} results):")

@@ -65,8 +65,8 @@ def process_geo_metadata(geo_metadata):
         if species_list:
             species = " ".join("".join(species_list).split())  # Properly format species
 
-        # Include only single-cell datasets based on summary
-        if "single-cell" not in summary.lower():
+        # Include datasets based on relevant terms
+        if not any(term in summary.lower() for term in ["single-cell", "scrnaseq", "scrna-seq"]):
             continue
 
         # Check if study is longitudinal
@@ -83,6 +83,19 @@ def process_geo_metadata(geo_metadata):
         })
     return pd.DataFrame(datasets)
 
+# Initialize session state for filters
+if "data" not in st.session_state:
+    st.session_state["data"] = None  # To store processed data
+
+if "search_filter" not in st.session_state:
+    st.session_state["search_filter"] = ""
+
+if "species_filter" not in st.session_state:
+    st.session_state["species_filter"] = ""
+
+if "longitudinal_filter" not in st.session_state:
+    st.session_state["longitudinal_filter"] = "All"
+
 # Streamlit app
 st.title("NCBI GEO Single-Cell Dataset Explorer")
 st.markdown("""
@@ -90,7 +103,7 @@ This app queries the NCBI GEO database for single-cell RNA-seq datasets and allo
 """)
 
 # Sidebar inputs for query and result limits
-search_term = st.sidebar.text_input("Search Term", value="single-cell RNA-seq")
+search_term = st.sidebar.text_input("Search Term", value="scRNA-seq")
 retmax = st.sidebar.number_input("Number of Results to Fetch", min_value=10, max_value=10000, value=1000, step=10)
 
 # Fetch and display data
@@ -102,42 +115,50 @@ if st.button("Fetch Datasets"):
             st.warning("No datasets found for the given query.")
         else:
             geo_metadata = fetch_geo_metadata(geo_ids)
-            df = process_geo_metadata(geo_metadata)
+            st.session_state["data"] = process_geo_metadata(geo_metadata)
             
-            if df.empty:
+            if st.session_state["data"].empty:
                 st.warning("No datasets could be processed.")
             else:
-                st.success(f"Processed {len(df)} datasets.")
-                
-                # Filters for the dataset table
-                st.sidebar.header("Filter Options")
-                search_filter = st.sidebar.text_input("Search by Terms (e.g., macrophages)")
-                if search_filter:
-                    df = df[df["Summary"].str.contains(search_filter, case=False, na=False)]
+                st.success(f"Processed {len(st.session_state['data'])} datasets.")
 
-                # Add a species filter
-                species_filter = st.sidebar.text_input("Filter by Species (e.g., human, mouse)")
-                if species_filter:
-                    df = df[df["Species"].str.contains(species_filter, case=False, na=False)]
+# Filters for the dataset table
+if st.session_state["data"] is not None:
+    st.sidebar.header("Filter Options")
+    st.session_state["search_filter"] = st.sidebar.text_input(
+        "Search by Terms (e.g., macrophages)", value=st.session_state["search_filter"]
+    )
+    st.session_state["species_filter"] = st.sidebar.text_input(
+        "Filter by Species (e.g., human, mouse)", value=st.session_state["species_filter"]
+    )
+    st.session_state["longitudinal_filter"] = st.sidebar.selectbox(
+        "Filter by Longitudinal Study",
+        options=["All", "Yes", "No"],
+        index=["All", "Yes", "No"].index(st.session_state["longitudinal_filter"]),
+    )
 
-                # Add a longitudinal study filter
-                longitudinal_filter = st.sidebar.selectbox("Filter by Longitudinal Study", options=["All", "Yes", "No"])
-                if longitudinal_filter != "All":
-                    df = df[df["Longitudinal Study"] == longitudinal_filter]
+    # Apply filters
+    df = st.session_state["data"].copy()
+    if st.session_state["search_filter"]:
+        df = df[df["Summary"].str.contains(st.session_state["search_filter"], case=False, na=False)]
+    if st.session_state["species_filter"]:
+        df = df[df["Species"].str.contains(st.session_state["species_filter"], case=False, na=False)]
+    if st.session_state["longitudinal_filter"] != "All":
+        df = df[df["Longitudinal Study"] == st.session_state["longitudinal_filter"]]
 
-                # Display the table
-                st.write(f"### Filtered Datasets ({len(df)} results):")
-                st.dataframe(df)
+    # Display the table
+    st.write(f"### Filtered Datasets ({len(df)} results):")
+    st.dataframe(df)
 
-                # Option to download the filtered table
-                @st.cache_data
-                def convert_df_to_csv(dataframe):
-                    return dataframe.to_csv(index=False).encode('utf-8')
+    # Option to download the filtered table
+    @st.cache_data
+    def convert_df_to_csv(dataframe):
+        return dataframe.to_csv(index=False).encode('utf-8')
 
-                csv = convert_df_to_csv(df)
-                st.download_button(
-                    label="Download Filtered Table as CSV",
-                    data=csv,
-                    file_name="filtered_geo_datasets.csv",
-                    mime="text/csv",
-                )
+    csv = convert_df_to_csv(df)
+    st.download_button(
+        label="Download Filtered Table as CSV",
+        data=csv,
+        file_name="filtered_geo_datasets.csv",
+        mime="text/csv",
+    )

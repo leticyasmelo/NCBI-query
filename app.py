@@ -6,7 +6,7 @@ import time
 
 # NCBI GEO query functions
 @st.cache_data
-def search_geo(term="single-cell RNA-seq", retmax=10000):
+def search_geo(term="scRNA-seq", retmax=10000):
     """Query GEO for datasets matching the given term."""
     GEO_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     params = {

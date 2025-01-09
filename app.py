@@ -5,7 +5,7 @@ import re
 import time
 
 # NCBI GEO query functions
-@st.cache
+@st.cache_data
 def search_geo(term="single-cell RNA-seq", retmax=10000):
     """Query GEO for datasets matching the given term."""
     GEO_BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -20,7 +20,7 @@ def search_geo(term="single-cell RNA-seq", retmax=10000):
     results = response.json()
     return results.get("esearchresult", {}).get("idlist", []), int(results.get("esearchresult", {}).get("count", 0))
 
-@st.cache
+@st.cache_data
 def fetch_geo_metadata(geo_ids, chunk_size=50):
     """Fetch metadata for given GEO dataset IDs in chunks with error handling."""
     GEO_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
@@ -46,7 +46,7 @@ def fetch_geo_metadata(geo_ids, chunk_size=50):
         time.sleep(0.5)  # Delay to avoid rate limits
     return results
 
-@st.cache
+@st.cache_data
 def process_geo_metadata(geo_metadata):
     """Process GEO metadata to extract relevant dataset information."""
     datasets = []
@@ -130,7 +130,7 @@ if st.button("Fetch Datasets"):
                 st.dataframe(df)
 
                 # Option to download the filtered table
-                @st.cache
+                @st.cache_data
                 def convert_df_to_csv(dataframe):
                     return dataframe.to_csv(index=False).encode('utf-8')
 
